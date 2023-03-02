@@ -464,9 +464,8 @@ unsigned floatScale2(unsigned uf)
   unsigned exp = uf << 1 >> 24;
   unsigned frac = uf << 9 >> 9;
 
-  unsigned mask = 0xff;
   // NaN or infinite
-  if (!(exp ^ mask))
+  if (exp == 0xff)
   {
     return uf;
   }
@@ -500,7 +499,37 @@ unsigned floatScale2(unsigned uf)
  */
 int floatFloat2Int(unsigned uf)
 {
-  return 2;
+  int result;
+  unsigned sign = uf >> 31;
+  unsigned exp = uf << 1 >> 24;
+  unsigned frac = uf << 9 >> 9;
+  // printf("exp: %x\n", exp);
+
+  // NaN or infinite
+  if (exp == 0xff)
+  {
+    return 0x80000000u;
+  }
+
+  // abs(uf)<1
+  if(exp<127)
+  {
+    return 0;
+  }
+
+  // overflow
+  if(exp>150){
+   return 0x80000000u; 
+  }
+
+  result = (frac+(1<<23))>>(150-exp);
+  if(sign){
+    // <0
+    return -result;
+  }else{
+    // >=0
+    return result;
+  }
 }
 /*
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -517,5 +546,22 @@ int floatFloat2Int(unsigned uf)
  */
 unsigned floatPower2(int x)
 {
-  return 2;
+  // printf("running %x\n", x);
+  // too large
+  if(x>=128){
+    return 0x7f800000;
+  }
+
+  // too small
+  if(x<=-150){
+    return 0;
+  }
+
+  // denormalize
+  if(x<=-127){
+    return (1<<22)>>(-x-127);
+  }
+
+  // normalize
+  return (x+127)<<23;
 }
