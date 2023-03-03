@@ -267,184 +267,201 @@ int logicalNeg(int x)
  *  Rating: 4
  */
 int howManyBits(int x)
-{
-  // x>=0 32 - leading 0s count + 1 eg: 00001000 -> 01000 8-4+1=5
-  // x<0  32 - leading 1s count + 1 eg: 11110100 -> 10100 8-4+1=5
+{ 
   // if x<0, transform the question to the minimum number of bits required
   // to represent ~x in two's complement
   // because if positive a (~x) need at least k bit, then -a-1 can be represent
   // in k bit (aka. ~(~x)+1-1 = x)
-
-  int leadingCount;
-  int xAndM0;
-  int xAndM1;
-  int xAndM2;
-  int xAndM3;
-  int xAndM4;
-  int xAndM5;
-  int xAndM6;
-  int xAndM7;
-  int xAndM8;
-  int xAndM9;
-  int xAndM10;
-  int xAndM11;
-  int xAndM12;
-  int xAndM13;
-  int xAndM14;
-  int xAndM15;
-  int xAndM16;
-  int xAndM17;
-  int xAndM18;
-  int xAndM19;
-  int xAndM20;
-  int xAndM21;
-  int xAndM22;
-  int xAndM23;
-  int xAndM24;
-  int xAndM25;
-  int xAndM26;
-  int xAndM27;
-  int xAndM28;
-  int xAndM29;
-  int xAndM30;
-  int xAndM31;
-
-  int m0;
-  int m1;
-  int m2;
-  int m3;
-  int m4;
-  int m5;
-  int m6;
-  int m7;
-  int m8;
-  int m9;
-  int m10;
-  int m11;
-  int m12;
-  int m13;
-  int m14;
-  int m15;
-  int m16;
-  int m17;
-  int m18;
-  int m19;
-  int m20;
-  int m21;
-  int m22;
-  int m23;
-  int m24;
-  int m25;
-  int m26;
-  int m27;
-  int m28;
-  int m29;
-  int m30;
-  int m31;
-
+  int b16, b8, b4, b2, b1, b0;
   x = ((~(x >> 31)) & x) | ((x >> 31) & (~x)); // cast negative to positive, ~x+1
 
-  m0 = 1 << 31;
-  m1 = m0 >> 1;
-  m2 = m0 >> 2;
-  m3 = m0 >> 3;
-  m4 = m0 >> 4;
-  m5 = m0 >> 5;
-  m6 = m0 >> 6;
-  m7 = m0 >> 7;
-  m8 = m0 >> 8;
-  m9 = m0 >> 9;
-  m10 = m0 >> 10;
-  m11 = m0 >> 11;
-  m12 = m0 >> 12;
-  m13 = m0 >> 13;
-  m14 = m0 >> 14;
-  m15 = m0 >> 15;
-  m16 = m0 >> 16;
-  m17 = m0 >> 17;
-  m18 = m0 >> 18;
-  m19 = m0 >> 19;
-  m20 = m0 >> 20;
-  m21 = m0 >> 21;
-  m22 = m0 >> 22;
-  m23 = m0 >> 23;
-  m24 = m0 >> 24;
-  m25 = m0 >> 25;
-  m26 = m0 >> 26;
-  m27 = m0 >> 27;
-  m28 = m0 >> 28;
-  m29 = m0 >> 29;
-  m30 = m0 >> 30;
-  m31 = m0 >> 31;
+  b16 = (!!(x >> 16)) << 4;
+  x = x >> b16;
+  b8 = (!!(x >> 8)) << 3;
+  x = x >> b8;
+  b4 = (!!(x >> 4)) << 2;
+  x = x >> b4;
+  b2 = (!!(x >> 2)) << 1;
+  x = x >> b2;
+  b1 = (!!(x >> 1));
+  x = x >> b1;
+  b0 = x;
 
-  xAndM0 = x & m0;
-  xAndM1 = x & m1;
-  xAndM2 = x & m2;
-  xAndM3 = x & m3;
-  xAndM4 = x & m4;
-  xAndM5 = x & m5;
-  xAndM6 = x & m6;
-  xAndM7 = x & m7;
-  xAndM8 = x & m8;
-  xAndM9 = x & m9;
-  xAndM10 = x & m10;
-  xAndM11 = x & m11;
-  xAndM12 = x & m12;
-  xAndM13 = x & m13;
-  xAndM14 = x & m14;
-  xAndM15 = x & m15;
-  xAndM16 = x & m16;
-  xAndM17 = x & m17;
-  xAndM18 = x & m18;
-  xAndM19 = x & m19;
-  xAndM20 = x & m20;
-  xAndM21 = x & m21;
-  xAndM22 = x & m22;
-  xAndM23 = x & m23;
-  xAndM24 = x & m24;
-  xAndM25 = x & m25;
-  xAndM26 = x & m26;
-  xAndM27 = x & m27;
-  xAndM28 = x & m28;
-  xAndM29 = x & m29;
-  xAndM30 = x & m30;
-  xAndM31 = x & m31;
+  return b16 + b8 + b4 + b2 + b1 + b0 + 1;
 
-  leadingCount =
-      !xAndM0 +
-      !xAndM1 +
-      !xAndM2 +
-      !xAndM3 +
-      !xAndM4 +
-      !xAndM5 +
-      !xAndM6 +
-      !xAndM7 +
-      !xAndM8 +
-      !xAndM9 +
-      !xAndM10 +
-      !xAndM11 +
-      !xAndM12 +
-      !xAndM13 +
-      !xAndM14 +
-      !xAndM15 +
-      !xAndM16 +
-      !xAndM17 +
-      !xAndM18 +
-      !xAndM19 +
-      !xAndM20 +
-      !xAndM21 +
-      !xAndM22 +
-      !xAndM23 +
-      !xAndM24 +
-      !xAndM25 +
-      !xAndM26 +
-      !xAndM27 +
-      !xAndM28 +
-      !xAndM29 +
-      !xAndM30 +
-      !xAndM31;
+  // // original answer, ops 136
+  // // x>=0 32 - leading 0s count + 1 eg: 00001000 -> 01000 8-4+1=5
+  // // x<0  32 - leading 1s count + 1 eg: 11110100 -> 10100 8-4+1=5
+  // int leadingCount;
+  // int xAndM0;
+  // int xAndM1;
+  // int xAndM2;
+  // int xAndM3;
+  // int xAndM4;
+  // int xAndM5;
+  // int xAndM6;
+  // int xAndM7;
+  // int xAndM8;
+  // int xAndM9;
+  // int xAndM10;
+  // int xAndM11;
+  // int xAndM12;
+  // int xAndM13;
+  // int xAndM14;
+  // int xAndM15;
+  // int xAndM16;
+  // int xAndM17;
+  // int xAndM18;
+  // int xAndM19;
+  // int xAndM20;
+  // int xAndM21;
+  // int xAndM22;
+  // int xAndM23;
+  // int xAndM24;
+  // int xAndM25;
+  // int xAndM26;
+  // int xAndM27;
+  // int xAndM28;
+  // int xAndM29;
+  // int xAndM30;
+  // int xAndM31;
 
-  return 34 + (~leadingCount); // 32 - leadingCount + 1
+  // int m0;
+  // int m1;
+  // int m2;
+  // int m3;
+  // int m4;
+  // int m5;
+  // int m6;
+  // int m7;
+  // int m8;
+  // int m9;
+  // int m10;
+  // int m11;
+  // int m12;
+  // int m13;
+  // int m14;
+  // int m15;
+  // int m16;
+  // int m17;
+  // int m18;
+  // int m19;
+  // int m20;
+  // int m21;
+  // int m22;
+  // int m23;
+  // int m24;
+  // int m25;
+  // int m26;
+  // int m27;
+  // int m28;
+  // int m29;
+  // int m30;
+  // int m31;
+
+  // x = ((~(x >> 31)) & x) | ((x >> 31) & (~x)); // cast negative to positive, ~x+1
+
+  // m0 = 1 << 31;
+  // m1 = m0 >> 1;
+  // m2 = m0 >> 2;
+  // m3 = m0 >> 3;
+  // m4 = m0 >> 4;
+  // m5 = m0 >> 5;
+  // m6 = m0 >> 6;
+  // m7 = m0 >> 7;
+  // m8 = m0 >> 8;
+  // m9 = m0 >> 9;
+  // m10 = m0 >> 10;
+  // m11 = m0 >> 11;
+  // m12 = m0 >> 12;
+  // m13 = m0 >> 13;
+  // m14 = m0 >> 14;
+  // m15 = m0 >> 15;
+  // m16 = m0 >> 16;
+  // m17 = m0 >> 17;
+  // m18 = m0 >> 18;
+  // m19 = m0 >> 19;
+  // m20 = m0 >> 20;
+  // m21 = m0 >> 21;
+  // m22 = m0 >> 22;
+  // m23 = m0 >> 23;
+  // m24 = m0 >> 24;
+  // m25 = m0 >> 25;
+  // m26 = m0 >> 26;
+  // m27 = m0 >> 27;
+  // m28 = m0 >> 28;
+  // m29 = m0 >> 29;
+  // m30 = m0 >> 30;
+  // m31 = m0 >> 31;
+
+  // xAndM0 = x & m0;
+  // xAndM1 = x & m1;
+  // xAndM2 = x & m2;
+  // xAndM3 = x & m3;
+  // xAndM4 = x & m4;
+  // xAndM5 = x & m5;
+  // xAndM6 = x & m6;
+  // xAndM7 = x & m7;
+  // xAndM8 = x & m8;
+  // xAndM9 = x & m9;
+  // xAndM10 = x & m10;
+  // xAndM11 = x & m11;
+  // xAndM12 = x & m12;
+  // xAndM13 = x & m13;
+  // xAndM14 = x & m14;
+  // xAndM15 = x & m15;
+  // xAndM16 = x & m16;
+  // xAndM17 = x & m17;
+  // xAndM18 = x & m18;
+  // xAndM19 = x & m19;
+  // xAndM20 = x & m20;
+  // xAndM21 = x & m21;
+  // xAndM22 = x & m22;
+  // xAndM23 = x & m23;
+  // xAndM24 = x & m24;
+  // xAndM25 = x & m25;
+  // xAndM26 = x & m26;
+  // xAndM27 = x & m27;
+  // xAndM28 = x & m28;
+  // xAndM29 = x & m29;
+  // xAndM30 = x & m30;
+  // xAndM31 = x & m31;
+
+  // leadingCount =
+  //     !xAndM0 +
+  //     !xAndM1 +
+  //     !xAndM2 +
+  //     !xAndM3 +
+  //     !xAndM4 +
+  //     !xAndM5 +
+  //     !xAndM6 +
+  //     !xAndM7 +
+  //     !xAndM8 +
+  //     !xAndM9 +
+  //     !xAndM10 +
+  //     !xAndM11 +
+  //     !xAndM12 +
+  //     !xAndM13 +
+  //     !xAndM14 +
+  //     !xAndM15 +
+  //     !xAndM16 +
+  //     !xAndM17 +
+  //     !xAndM18 +
+  //     !xAndM19 +
+  //     !xAndM20 +
+  //     !xAndM21 +
+  //     !xAndM22 +
+  //     !xAndM23 +
+  //     !xAndM24 +
+  //     !xAndM25 +
+  //     !xAndM26 +
+  //     !xAndM27 +
+  //     !xAndM28 +
+  //     !xAndM29 +
+  //     !xAndM30 +
+  //     !xAndM31;
+
+  // return 34 + (~leadingCount); // 32 - leadingCount + 1
 }
 // float
 /*
@@ -512,21 +529,25 @@ int floatFloat2Int(unsigned uf)
   }
 
   // abs(uf)<1
-  if(exp<127)
+  if (exp < 127)
   {
     return 0;
   }
 
   // overflow
-  if(exp>150){
-   return 0x80000000u; 
+  if (exp > 150)
+  {
+    return 0x80000000u;
   }
 
-  result = (frac+(1<<23))>>(150-exp);
-  if(sign){
+  result = (frac + (1 << 23)) >> (150 - exp);
+  if (sign)
+  {
     // <0
     return -result;
-  }else{
+  }
+  else
+  {
     // >=0
     return result;
   }
@@ -548,20 +569,23 @@ unsigned floatPower2(int x)
 {
   // printf("running %x\n", x);
   // too large
-  if(x>=128){
+  if (x >= 128)
+  {
     return 0x7f800000;
   }
 
   // too small
-  if(x<=-150){
+  if (x <= -150)
+  {
     return 0;
   }
 
   // denormalize
-  if(x<=-127){
-    return (1<<22)>>(-x-127);
+  if (x <= -127)
+  {
+    return (1 << 22) >> (-x - 127);
   }
 
   // normalize
-  return (x+127)<<23;
+  return (x + 127) << 23;
 }
