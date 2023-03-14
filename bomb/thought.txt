@@ -1,0 +1,6 @@
+bomb6:
+- 0x401153 check all number x1,x2...x6 <= 6, and they differ from each other.
+- 0x40116d x = 7-x
+- 0x4011ab read from link list by index(x), store in stack
+- 0x4011d2 reconstruct the link list to correct pointing next
+- end check the link list is sorted
