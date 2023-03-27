@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <string.h>
 #include "cachelab.h"
 
 unsigned long ts = 0;
@@ -158,14 +159,9 @@ int main(int argc, char **argv)
 
     int S = 1 << s;
     line(*cache)[E] = malloc(sizeof(line) * S * E);
-    // init the cache
-    for (int i = 0; i < S; i++)
-    {
-        for (int j = 0; j < E; j++)
-        {
-            cache[i][E].valid = 0;
-        }
-    }
+    memset(cache, 0, sizeof(line)*S*E);
+    // line cache[S][E];
+    // memset(cache, 0, sizeof(line)*S*E);
 
     // reading trace file
     FILE *traceFile;
