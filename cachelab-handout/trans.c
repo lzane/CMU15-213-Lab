@@ -31,6 +31,56 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
     }
 
     if(M==64&&N==64){
+        // because the cache can only contains 4 matrix lines, use 8x8 block size will cause 
+        // conflict misses when writing to B
+        B_row = 4; 
+    }
+
+    if(M==61&&N==67){
+        B_row = 8;
+    }
+
+    int ti;
+    int tj;
+    int tv;
+    
+    for(int i=0; i<M; i+=B_row){
+        for(int j=0; j<N; j+=B_col){
+            for(int jj=j; jj<MIN(N, j+B_col); jj++){
+                ti = -1;
+                tj = -1;
+                for(int ii=i; ii<MIN(M, i+B_row);ii++){
+                    // postpone the write in diagonal to avoid conflict misses
+                    if(ii == jj){
+                        ti = ii;
+                        tj = jj;
+                        tv = A[jj][ii];
+                        continue;
+                    }
+                    B[ii][jj] = A[jj][ii];
+                }
+                if(ti!=-1){
+                    B[ti][tj] = tv;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * only use blocking
+*/
+char blocking_trans_desc[] = "blocking transform";
+void blocking_trans(int M, int N, int A[N][M], int B[M][N])
+{
+    int B_col = 1<<(5-2);// each cache line can hold B_col int
+    int B_row = B_col;
+
+    if(M==32&&N==32){
+        B_row = 8;
+    }
+
+    if(M==64&&N==64){
         B_row = 4;
     }
 
@@ -82,6 +132,8 @@ void registerFunctions()
 {
     /* Register your solution function */
     registerTransFunction(transpose_submit, transpose_submit_desc); 
+
+    registerTransFunction(blocking_trans, blocking_trans_desc);
 
     /* Register any additional transpose functions */
     registerTransFunction(trans, trans_desc); 
