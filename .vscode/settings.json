@@ -1,6 +1,10 @@
 {
   "files.associations": {
     "functional": "c",
-    "type_traits": "c"
+    "type_traits": "c",
+    "signal.h": "c",
+    "stdio.h": "c",
+    "types.h": "c",
+    "unistd.h": "c"
   }
 }
