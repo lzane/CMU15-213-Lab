@@ -180,9 +180,10 @@ void eval(char *cmdline)
     }
 
     // not builtin cmd
-    sigset_t blockMask, origMask;
+    sigset_t blockMask, origMask, allMask;
     sigemptyset(&blockMask);
     sigaddset(&blockMask, SIGCHLD);
+    sigfillset(&allMask);
     if (sigprocmask(SIG_BLOCK, &blockMask, &origMask) == -1)
     {
         unix_error("sigprocmask");
@@ -207,12 +208,9 @@ void eval(char *cmdline)
     default:
     {
         int state = bg ? BG : FG;
+        sigprocmask(SIG_BLOCK, &allMask, NULL);
         addjob(jobs, child_pid, state, cmdline);
-
-        if (sigprocmask(SIG_SETMASK, &origMask, NULL) == -1)
-        {
-            unix_error("sigprocmask");
-        }
+        sigprocmask(SIG_SETMASK, &blockMask, NULL);
 
         if (!bg)
         {
@@ -225,6 +223,11 @@ void eval(char *cmdline)
 
         break;
     }
+    }
+
+    if (sigprocmask(SIG_SETMASK, &origMask, NULL) == -1)
+    {
+        unix_error("sigprocmask");
     }
 
     return;
@@ -305,7 +308,11 @@ int builtin_cmd(char **argv)
     }
     else if (strcmp(argv[0], "jobs") == 0)
     {
+        sigset_t allMask, origMask;
+        sigfillset(&allMask);
+        sigprocmask(SIG_BLOCK, &allMask, &origMask);
         listjobs(jobs);
+        sigprocmask(SIG_SETMASK, &origMask, NULL);
         return 1;
     }
     else if (strcmp(argv[0], "fg") == 0 || strcmp(argv[0], "bg") == 0)
@@ -337,11 +344,15 @@ void do_bgfg(char **argv)
         printf("%s: argument must be a PID or %%jobid\n", argv[0]);
         return;
     }
+    sigset_t allMask, origMask;
+    sigfillset(&allMask);
 
     struct job_t *job;
     if (pid != -1)
     {
+        sigprocmask(SIG_BLOCK, &allMask, &origMask);
         job = getjobpid(jobs, pid);
+        sigprocmask(SIG_SETMASK, &origMask, NULL);
         if (job == NULL)
         {
             printf("(%d): No such process\n", pid);
@@ -350,7 +361,9 @@ void do_bgfg(char **argv)
     }
     else
     {
+        sigprocmask(SIG_BLOCK, &allMask, &origMask);
         job = getjobjid(jobs, jid);
+        sigprocmask(SIG_SETMASK, &origMask, NULL);
         if (job == NULL)
         {
             printf("%%%d: No such job\n", jid);
@@ -363,6 +376,7 @@ void do_bgfg(char **argv)
         unix_error("kill");
     }
 
+    sigprocmask(SIG_BLOCK, &allMask, &origMask);
     if (strcmp(argv[0], "bg") == 0)
     {
         job->state = BG;
@@ -373,6 +387,7 @@ void do_bgfg(char **argv)
         job->state = FG;
         waitfg(job->pid);
     }
+    sigprocmask(SIG_SETMASK, &origMask, NULL);
     return;
 }
 
@@ -381,10 +396,21 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
-    while (fgpid(jobs) == pid)
+    sigset_t emptyMask, allMask, origMask;
+    sigemptyset(&emptyMask);
+    sigfillset(&allMask);
+
+    while (1)
     {
-        // printf("wait... fg: %d  my: %d\n", fgpid(jobs), pid);
-        sleep(1);
+        sigsuspend(&emptyMask);
+        sigprocmask(SIG_BLOCK, &allMask, &origMask);
+        pid_t fgId = fgpid(jobs);
+        sigprocmask(SIG_SETMASK, &origMask, NULL);
+
+        if (fgId != pid)
+        {
+            break;
+        }
     }
 
     return;
@@ -404,12 +430,17 @@ void waitfg(pid_t pid)
 void sigchld_handler(int sig)
 {
     int pid, stat;
+    sigset_t allMask, origMask;
+    sigfillset(&allMask);
+    
     while ((pid = waitpid(-1, &stat, WUNTRACED | WNOHANG)) > 0)
     {
+        sigprocmask(SIG_BLOCK, &allMask, &origMask);
         // normal exit
         if (WIFEXITED(stat))
         {
             deletejob(jobs, pid);
+            sigprocmask(SIG_SETMASK, &origMask, NULL);
             continue;
         }
         // exit by signal
@@ -422,6 +453,7 @@ void sigchld_handler(int sig)
             }
 
             deletejob(jobs, pid);
+            sigprocmask(SIG_SETMASK, &origMask, NULL);
             continue;
         }
 
@@ -433,6 +465,7 @@ void sigchld_handler(int sig)
                 printf("Job [%d] (%d) stopped by signal %d\n", job->jid, job->pid, WSTOPSIG(stat));
             }
             job->state = ST;
+            sigprocmask(SIG_SETMASK, &origMask, NULL);
             continue;
         }
     }
@@ -452,7 +485,13 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig)
 {
+    sigset_t allMask, origMask;
+    sigfillset(&allMask);
+
+    sigprocmask(SIG_BLOCK, &allMask, &origMask);
     pid_t pid = fgpid(jobs);
+    sigprocmask(SIG_SETMASK, &origMask, NULL);
+
     if (pid == 0)
     {
         return;
@@ -472,7 +511,13 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig)
 {
+    sigset_t allMask, origMask;
+    sigfillset(&allMask);
+    
+    sigprocmask(SIG_BLOCK, &allMask, &origMask);
     pid_t pid = fgpid(jobs);
+    sigprocmask(SIG_SETMASK, &origMask, NULL);
+
     if (pid == 0)
     {
         return;
