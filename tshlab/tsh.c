@@ -208,7 +208,7 @@ void eval(const char *cmdline) {
         if (sigprocmask(SIG_SETMASK, &origMask, NULL) == -1) {
             unix_error("sigprocmask");
         }
-        execve(token.argv[0], token.argv, NULL);
+        execve(token.argv[0], token.argv, environ);
         printf("%s: Command not found\n", token.argv[0]);
         exit(1);
         break;
