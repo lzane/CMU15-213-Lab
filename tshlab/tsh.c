@@ -220,9 +220,9 @@ void eval(const char *cmdline) {
         sigprocmask(SIG_SETMASK, &blockMask, NULL);
 
         if (parse_result == PARSELINE_FG) {
-            waitfg(child_pid);
+            waitfg(jobId);
         } else {
-            printf("[%d] (%d) %s", jobId, child_pid, cmdline);
+            printf("[%d] (%d) %s\n", jobId, child_pid, cmdline);
         }
 
         break;
@@ -315,7 +315,7 @@ void do_bgfg(struct cmdline_tokens *token) {
 
     if (strcmp(token->argv[0], "bg") == 0) {
         job_set_state(jobId, BG);
-        printf("[%d] (%d) %s", jobId, pId, cmdline);
+        printf("[%d] (%d) %s\n", jobId, pId, cmdline);
     } else if (strcmp(token->argv[0], "fg") == 0) {
         job_set_state(jobId, FG);
         waitfg(jobId);
@@ -357,17 +357,17 @@ void waitfg(jid_t jobId) {
  * they finish.
  */
 void sigchld_handler(int sig) {
+    int origErrno = errno;
     int pid, stat;
     sigset_t allMask, origMask;
     sigfillset(&allMask);
 
+    sigprocmask(SIG_BLOCK, &allMask, &origMask);
     while ((pid = waitpid(-1, &stat, WUNTRACED | WNOHANG)) > 0) {
-        sigprocmask(SIG_BLOCK, &allMask, &origMask);
         jid_t jobId = job_from_pid(pid);
         // normal exit
         if (WIFEXITED(stat)) {
             delete_job(jobId);
-            sigprocmask(SIG_SETMASK, &origMask, NULL);
             continue;
         }
         // exit by signal
@@ -378,7 +378,6 @@ void sigchld_handler(int sig) {
             }
 
             delete_job(jobId);
-            sigprocmask(SIG_SETMASK, &origMask, NULL);
             continue;
         }
 
@@ -388,15 +387,16 @@ void sigchld_handler(int sig) {
                        WSTOPSIG(stat));
             }
             job_set_state(jobId, ST);
-            sigprocmask(SIG_SETMASK, &origMask, NULL);
             continue;
         }
     }
+    sigprocmask(SIG_SETMASK, &origMask, NULL);
 
     if (pid == -1 && errno != ECHILD) {
-        unix_error("waitpid");
+        // unix_error("waitpid");
     }
 
+    errno = origErrno;
     return;
 }
 
@@ -405,6 +405,7 @@ void sigchld_handler(int sig) {
  * Send the SIGINT signals to fg jobs
  */
 void sigint_handler(int sig) {
+    int origErrno = errno;
     sigset_t allMask, origMask;
     sigfillset(&allMask);
 
@@ -413,13 +414,16 @@ void sigint_handler(int sig) {
     pid_t pid = job_get_pid(jobId);
     sigprocmask(SIG_SETMASK, &origMask, NULL);
 
+    // no fg job
     if (jobId == 0) {
+        errno = origErrno;
         return;
     }
 
     if (kill(-pid, SIGINT) == -1) {
         unix_error("kill");
     }
+    errno = origErrno;
     return;
 }
 
@@ -428,6 +432,7 @@ void sigint_handler(int sig) {
  * Send the SIGTSTP signals to fg jobs
  */
 void sigtstp_handler(int sig) {
+    int origErrno = errno;
     sigset_t allMask, origMask;
     sigfillset(&allMask);
 
@@ -437,12 +442,14 @@ void sigtstp_handler(int sig) {
     sigprocmask(SIG_SETMASK, &origMask, NULL);
 
     if (jobId == 0) {
+        errno = origErrno;
         return;
     }
 
     if (kill(-pid, sig) == -1) {
         unix_error("kill");
     }
+    errno = origErrno;
     return;
 }
 
@@ -469,6 +476,6 @@ void cleanup(void) {
  * Args: struct cmdline_tokens *token
  * Return: 1 if redirect successfully, otherwise 0
  */
-int redirection(struct cmdline_tokens *token) { 
+int redirection(struct cmdline_tokens *token) {
     return 0;
 }
