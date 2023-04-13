@@ -59,12 +59,13 @@ int redirection(struct cmdline_tokens *token);
 void unix_error(char *msg);
 void waitfg(jid_t jobId);
 void do_bgfg(struct cmdline_tokens *token);
+int Sigprocmask(int how, const sigset_t *now, sigset_t *orig);
 
 /*
  * unix_error - unix-style error routine
  */
 void unix_error(char *msg) {
-    fprintf(stdout, "%s: %s\n", msg, strerror(errno));
+    sio_printf("%s: %s\n", msg, strerror(errno));
     exit(1);
 }
 /*
@@ -194,9 +195,10 @@ void eval(const char *cmdline) {
     sigemptyset(&blockMask);
     sigaddset(&blockMask, SIGCHLD);
     sigfillset(&allMask);
-    if (sigprocmask(SIG_BLOCK, &blockMask, &origMask) == -1) {
-        unix_error("sigprocmask");
-    }
+
+    // block all signal to solve race condition
+    // SIGCHILD or SIGINT before add_job
+    Sigprocmask(SIG_BLOCK, &allMask, &origMask);
 
     pid_t child_pid;
     switch (child_pid = fork()) {
@@ -205,19 +207,16 @@ void eval(const char *cmdline) {
         break;
     case 0:
         setpgid(0, 0);
-        if (sigprocmask(SIG_SETMASK, &origMask, NULL) == -1) {
-            unix_error("sigprocmask");
-        }
+        Sigprocmask(SIG_SETMASK, &origMask, NULL);
         execve(token.argv[0], token.argv, environ);
         printf("%s: Command not found\n", token.argv[0]);
         exit(1);
         break;
     default: {
         int state = parse_result == PARSELINE_BG ? BG : FG;
-        sigprocmask(SIG_BLOCK, &allMask, NULL);
         add_job(child_pid, state, cmdline);
         jid_t jobId = job_from_pid(child_pid);
-        sigprocmask(SIG_SETMASK, &blockMask, NULL);
+        Sigprocmask(SIG_SETMASK, &blockMask, NULL);
 
         if (parse_result == PARSELINE_FG) {
             waitfg(jobId);
@@ -229,9 +228,7 @@ void eval(const char *cmdline) {
     }
     }
 
-    if (sigprocmask(SIG_SETMASK, &origMask, NULL) == -1) {
-        unix_error("sigprocmask");
-    }
+    Sigprocmask(SIG_SETMASK, &origMask, NULL);
 
     return;
 }
@@ -246,10 +243,10 @@ int builtin_command(struct cmdline_tokens *token) {
     } else if (strcmp(token->argv[0], "jobs") == 0) {
         sigset_t allMask, origMask;
         sigfillset(&allMask);
-        sigprocmask(SIG_BLOCK, &allMask, &origMask);
+        Sigprocmask(SIG_BLOCK, &allMask, &origMask);
         // TODO: currently print to stdout
         list_jobs(1);
-        sigprocmask(SIG_SETMASK, &origMask, NULL);
+        Sigprocmask(SIG_SETMASK, &origMask, NULL);
         return 1;
     } else if (strcmp(token->argv[0], "fg") == 0 ||
                strcmp(token->argv[0], "bg") == 0) {
@@ -283,34 +280,34 @@ void do_bgfg(struct cmdline_tokens *token) {
     jid_t jobId;
 
     if (pid != -1) {
-        sigprocmask(SIG_BLOCK, &allMask, &origMask);
+        Sigprocmask(SIG_BLOCK, &allMask, &origMask);
         jobId = job_from_pid(pid);
         int exist = job_exists(jobId);
-        sigprocmask(SIG_SETMASK, &origMask, NULL);
+        Sigprocmask(SIG_SETMASK, &origMask, NULL);
         if (!exist) {
             printf("(%d): No such process\n", pid);
             return;
         }
     } else {
-        sigprocmask(SIG_BLOCK, &allMask, &origMask);
+        Sigprocmask(SIG_BLOCK, &allMask, &origMask);
         jobId = jid;
         int exist = job_exists(jobId);
-        sigprocmask(SIG_SETMASK, &origMask, NULL);
+        Sigprocmask(SIG_SETMASK, &origMask, NULL);
         if (!exist) {
             printf("%%%d: No such job\n", jid);
             return;
         }
     }
 
-    sigprocmask(SIG_BLOCK, &allMask, &origMask);
+    Sigprocmask(SIG_BLOCK, &allMask, &origMask);
     pid_t pId = job_get_pid(jobId);
-    sigprocmask(SIG_SETMASK, &origMask, NULL);
+    Sigprocmask(SIG_SETMASK, &origMask, NULL);
 
     if (kill(-pId, SIGCONT) == -1) {
         unix_error("kill");
     }
 
-    sigprocmask(SIG_BLOCK, &allMask, &origMask);
+    Sigprocmask(SIG_BLOCK, &allMask, &origMask);
     const char *cmdline = job_get_cmdline(jobId);
 
     if (strcmp(token->argv[0], "bg") == 0) {
@@ -320,7 +317,7 @@ void do_bgfg(struct cmdline_tokens *token) {
         job_set_state(jobId, FG);
         waitfg(jobId);
     }
-    sigprocmask(SIG_SETMASK, &origMask, NULL);
+    Sigprocmask(SIG_SETMASK, &origMask, NULL);
     return;
 }
 
@@ -334,9 +331,9 @@ void waitfg(jid_t jobId) {
 
     while (1) {
         sigsuspend(&emptyMask);
-        sigprocmask(SIG_BLOCK, &allMask, &origMask);
+        Sigprocmask(SIG_BLOCK, &allMask, &origMask);
         jid_t fgId = fg_job();
-        sigprocmask(SIG_SETMASK, &origMask, NULL);
+        Sigprocmask(SIG_SETMASK, &origMask, NULL);
 
         if (fgId != jobId) {
             break;
@@ -362,7 +359,7 @@ void sigchld_handler(int sig) {
     sigset_t allMask, origMask;
     sigfillset(&allMask);
 
-    sigprocmask(SIG_BLOCK, &allMask, &origMask);
+    Sigprocmask(SIG_BLOCK, &allMask, &origMask);
     while ((pid = waitpid(-1, &stat, WUNTRACED | WNOHANG)) > 0) {
         jid_t jobId = job_from_pid(pid);
         // normal exit
@@ -372,25 +369,21 @@ void sigchld_handler(int sig) {
         }
         // exit by signal
         if (WIFSIGNALED(stat)) {
-            if (jobId == fg_job()) {
-                printf("Job [%d] (%d) terminated by signal %d\n", jobId, pid,
-                       WTERMSIG(stat));
-            }
+            sio_printf("Job [%d] (%d) terminated by signal %d\n", jobId, pid,
+                   WTERMSIG(stat));
 
             delete_job(jobId);
             continue;
         }
 
         if (WIFSTOPPED(stat)) {
-            if (jobId == fg_job()) {
-                printf("Job [%d] (%d) stopped by signal %d\n", jobId, pid,
-                       WSTOPSIG(stat));
-            }
+            sio_printf("Job [%d] (%d) stopped by signal %d\n", jobId, pid,
+                   WSTOPSIG(stat));
             job_set_state(jobId, ST);
             continue;
         }
     }
-    sigprocmask(SIG_SETMASK, &origMask, NULL);
+    Sigprocmask(SIG_SETMASK, &origMask, NULL);
 
     if (pid == -1 && errno != ECHILD) {
         // unix_error("waitpid");
@@ -409,10 +402,10 @@ void sigint_handler(int sig) {
     sigset_t allMask, origMask;
     sigfillset(&allMask);
 
-    sigprocmask(SIG_BLOCK, &allMask, &origMask);
+    Sigprocmask(SIG_BLOCK, &allMask, &origMask);
     jid_t jobId = fg_job();
     pid_t pid = job_get_pid(jobId);
-    sigprocmask(SIG_SETMASK, &origMask, NULL);
+    Sigprocmask(SIG_SETMASK, &origMask, NULL);
 
     // no fg job
     if (jobId == 0) {
@@ -436,10 +429,10 @@ void sigtstp_handler(int sig) {
     sigset_t allMask, origMask;
     sigfillset(&allMask);
 
-    sigprocmask(SIG_BLOCK, &allMask, &origMask);
+    Sigprocmask(SIG_BLOCK, &allMask, &origMask);
     jid_t jobId = fg_job();
     pid_t pid = job_get_pid(jobId);
-    sigprocmask(SIG_SETMASK, &origMask, NULL);
+    Sigprocmask(SIG_SETMASK, &origMask, NULL);
 
     if (jobId == 0) {
         errno = origErrno;
@@ -470,6 +463,14 @@ void cleanup(void) {
 /*****************
  * Helper functions
  *****************/
+int Sigprocmask(int how, const sigset_t *now, sigset_t *orig) {
+    int res = sigprocmask(how, now, orig);
+    if (res == -1) {
+        unix_error("Sigprocmask");
+    }
+
+    return res;
+}
 
 /*
  * Redirect I/O if specified in cmd
