@@ -370,7 +370,7 @@ void sigchld_handler(int sig) {
         // exit by signal
         if (WIFSIGNALED(stat)) {
             sio_printf("Job [%d] (%d) terminated by signal %d\n", jobId, pid,
-                   WTERMSIG(stat));
+                       WTERMSIG(stat));
 
             delete_job(jobId);
             continue;
@@ -378,7 +378,7 @@ void sigchld_handler(int sig) {
 
         if (WIFSTOPPED(stat)) {
             sio_printf("Job [%d] (%d) stopped by signal %d\n", jobId, pid,
-                   WSTOPSIG(stat));
+                       WSTOPSIG(stat));
             job_set_state(jobId, ST);
             continue;
         }
@@ -401,21 +401,18 @@ void sigint_handler(int sig) {
     int origErrno = errno;
     sigset_t allMask, origMask;
     sigfillset(&allMask);
-
     Sigprocmask(SIG_BLOCK, &allMask, &origMask);
+    
     jid_t jobId = fg_job();
-    pid_t pid = job_get_pid(jobId);
-    Sigprocmask(SIG_SETMASK, &origMask, NULL);
-
     // no fg job
-    if (jobId == 0) {
-        errno = origErrno;
-        return;
+    if (jobId != 0) {
+        pid_t pid = job_get_pid(jobId);
+        if (kill(-pid, sig) == -1) {
+            unix_error("kill");
+        }
     }
 
-    if (kill(-pid, SIGINT) == -1) {
-        unix_error("kill");
-    }
+    Sigprocmask(SIG_SETMASK, &origMask, NULL);
     errno = origErrno;
     return;
 }
@@ -425,24 +422,7 @@ void sigint_handler(int sig) {
  * Send the SIGTSTP signals to fg jobs
  */
 void sigtstp_handler(int sig) {
-    int origErrno = errno;
-    sigset_t allMask, origMask;
-    sigfillset(&allMask);
-
-    Sigprocmask(SIG_BLOCK, &allMask, &origMask);
-    jid_t jobId = fg_job();
-    pid_t pid = job_get_pid(jobId);
-    Sigprocmask(SIG_SETMASK, &origMask, NULL);
-
-    if (jobId == 0) {
-        errno = origErrno;
-        return;
-    }
-
-    if (kill(-pid, sig) == -1) {
-        unix_error("kill");
-    }
-    errno = origErrno;
+    sigint_handler(sig);
     return;
 }
 
