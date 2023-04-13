@@ -55,11 +55,11 @@ void sigint_handler(int sig);
 void sigquit_handler(int sig);
 void cleanup(void);
 int builtin_command(struct cmdline_tokens *token);
-int redirection(struct cmdline_tokens *token);
 void unix_error(char *msg);
 void waitfg(jid_t jobId);
 void do_bgfg(struct cmdline_tokens *token);
 int Sigprocmask(int how, const sigset_t *now, sigset_t *orig);
+void redirection(struct cmdline_tokens *token);
 
 /*
  * unix_error - unix-style error routine
@@ -207,9 +207,10 @@ void eval(const char *cmdline) {
         break;
     case 0:
         setpgid(0, 0);
+        redirection(&token);
         Sigprocmask(SIG_SETMASK, &origMask, NULL);
         execve(token.argv[0], token.argv, environ);
-        printf("%s: Command not found\n", token.argv[0]);
+        printf("%s: %s\n", token.argv[0], strerror(errno));
         exit(1);
         break;
     default: {
@@ -241,11 +242,18 @@ int builtin_command(struct cmdline_tokens *token) {
     if (strcmp(token->argv[0], "quit") == 0) {
         exit(0);
     } else if (strcmp(token->argv[0], "jobs") == 0) {
+        int fd = STDOUT_FILENO;
+        if (token->outfile != NULL) {
+            if ((fd = open(token->outfile, O_WRONLY | O_CREAT | O_TRUNC,
+                           S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH)) == -1) {
+                sio_printf("%s: %s\n", token->infile, strerror(errno));
+                return 1;
+            }
+        }
         sigset_t allMask, origMask;
         sigfillset(&allMask);
         Sigprocmask(SIG_BLOCK, &allMask, &origMask);
-        // TODO: currently print to stdout
-        list_jobs(1);
+        list_jobs(fd);
         Sigprocmask(SIG_SETMASK, &origMask, NULL);
         return 1;
     } else if (strcmp(token->argv[0], "fg") == 0 ||
@@ -278,8 +286,8 @@ void do_bgfg(struct cmdline_tokens *token) {
     sigfillset(&allMask);
 
     jid_t jobId;
-
     if (pid != -1) {
+        // pid
         Sigprocmask(SIG_BLOCK, &allMask, &origMask);
         jobId = job_from_pid(pid);
         int exist = job_exists(jobId);
@@ -289,6 +297,7 @@ void do_bgfg(struct cmdline_tokens *token) {
             return;
         }
     } else {
+        // jobId
         Sigprocmask(SIG_BLOCK, &allMask, &origMask);
         jobId = jid;
         int exist = job_exists(jobId);
@@ -301,15 +310,10 @@ void do_bgfg(struct cmdline_tokens *token) {
 
     Sigprocmask(SIG_BLOCK, &allMask, &origMask);
     pid_t pId = job_get_pid(jobId);
-    Sigprocmask(SIG_SETMASK, &origMask, NULL);
-
     if (kill(-pId, SIGCONT) == -1) {
         unix_error("kill");
     }
-
-    Sigprocmask(SIG_BLOCK, &allMask, &origMask);
     const char *cmdline = job_get_cmdline(jobId);
-
     if (strcmp(token->argv[0], "bg") == 0) {
         job_set_state(jobId, BG);
         printf("[%d] (%d) %s\n", jobId, pId, cmdline);
@@ -402,7 +406,7 @@ void sigint_handler(int sig) {
     sigset_t allMask, origMask;
     sigfillset(&allMask);
     Sigprocmask(SIG_BLOCK, &allMask, &origMask);
-    
+
     jid_t jobId = fg_job();
     // no fg job
     if (jobId != 0) {
@@ -452,11 +456,22 @@ int Sigprocmask(int how, const sigset_t *now, sigset_t *orig) {
     return res;
 }
 
-/*
- * Redirect I/O if specified in cmd
- * Args: struct cmdline_tokens *token
- * Return: 1 if redirect successfully, otherwise 0
- */
-int redirection(struct cmdline_tokens *token) {
-    return 0;
+void redirection(struct cmdline_tokens *token) {
+    if (token->infile != NULL) {
+        int fd;
+        if ((fd = open(token->infile, O_RDONLY)) == -1) {
+            sio_printf("%s: %s\n", token->infile, strerror(errno));
+            exit(1);
+        }
+        dup2(fd, STDIN_FILENO);
+    }
+    if (token->outfile != NULL) {
+        int fd;
+        if ((fd = open(token->outfile, O_WRONLY | O_CREAT | O_TRUNC,
+                       S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH)) == -1) {
+            sio_printf("%s: %s\n", token->infile, strerror(errno));
+            exit(1);
+        }
+        dup2(fd, STDOUT_FILENO);
+    }
 }
