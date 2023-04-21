@@ -26,6 +26,9 @@
  */
 #define NEXT_FITx
 
+#define checkheap(x) mm_checkheap(x);
+// #define checkheap(x)
+
 /* Basic constants and macros */
 #define WSIZE       4       /* Word and header/footer size (bytes) */ 
 #define DSIZE       8       /* Double word size (bytes) */
@@ -79,12 +82,13 @@ int mm_init(void)
     if ((heap_listp = mem_sbrk(8*WSIZE)) == (void *)-1) 
         return -1;
     PUT(heap_listp, 0);                          /* Alignment padding */
-    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); /* Prologue header */
+    PUT(heap_listp + (1*WSIZE), PACK(3*DSIZE, 1)); /* Prologue header */
     PUTD(heap_listp + (2*WSIZE), NULL);             /* free list root node prev*/
     PUTD(heap_listp + (4*WSIZE), NULL);             /* free list root node next*/
-    PUT(heap_listp + (6*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
+    PUT(heap_listp + (6*WSIZE), PACK(3*DSIZE, 1)); /* Prologue footer */ 
     PUT(heap_listp + (7*WSIZE), PACK(0, 1));     /* Epilogue header */
     heap_listp += (2*WSIZE);
+    checkheap(__LINE__);
 
 #ifdef NEXT_FIT
     rover = heap_listp;
@@ -93,6 +97,8 @@ int mm_init(void)
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL) 
         return -1;
+
+    checkheap(__LINE__);
     return 0;
 }
 
@@ -200,7 +206,8 @@ void *realloc(void *ptr, size_t size)
 void mm_checkheap(int lineno)  
 { 
     char *bp;
-    
+
+    // check the heap
     bp = heap_listp;
     while (1)
     {
@@ -224,6 +231,24 @@ void mm_checkheap(int lineno)
         // check next bp
         bp += GET_SIZE(HDRP(bp));
     }
+
+    // check the free list 
+    bp = heap_listp;
+    while (1)
+    {
+        // reach end
+        if(GETD(NEXT_FREE(bp))==NULL){
+            break;
+        }
+
+        char *next = GETD(NEXT_FREE(bp));
+        if(GETD(PREV_FREE(next))!=bp){
+            printf("[%d] a's next and b's prev not equal\n", lineno);
+            exit(1);
+        }
+
+        bp = next;
+    }
 }
 
 /* 
@@ -234,19 +259,29 @@ void mm_checkheap(int lineno)
  * append node b after node a
 */
 static void append_free_node(void *a, void *b){
+    mm_checkheap(__LINE__); 
+    
     void *c = GETD(NEXT_FREE(a));
     PUTD(NEXT_FREE(a), b);
     PUTD(PREV_FREE(b), a);
+
+    // clear b's next
+    PUTD(NEXT_FREE(b), NULL);
+
     if(c!=NULL){
         PUTD(NEXT_FREE(b), c);
         PUTD(PREV_FREE(c), b);
     }
+    
+    mm_checkheap(__LINE__); 
 }
 
 /**
  * remove node a from free list
 */
 static void remove_free_node(void *a){
+    mm_checkheap(__LINE__); 
+
     void *prevNode = GETD(PREV_FREE(a));
     void *nextNode = GETD(NEXT_FREE(a));
 
@@ -257,6 +292,8 @@ static void remove_free_node(void *a){
     if(nextNode!=NULL){
         PUTD(PREV_FREE(nextNode), prevNode);
     }
+    
+    mm_checkheap(__LINE__); 
 }
 
 /* 
@@ -339,6 +376,8 @@ static void place(void *bp, size_t asize)
     PUT(HDRP(bp), PACK(csize, 1));
     PUT(FTRP(bp), PACK(csize, 1));
     remove_free_node(bp);
+    
+    checkheap(__LINE__);
     // TODO: no spliting
 }
 
