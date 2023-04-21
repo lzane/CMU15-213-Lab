@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include "mm.h"
 #include "memlib.h"
@@ -37,7 +38,7 @@
 
 /* Read and write a word at address p */
 #define GET(p)       (*(unsigned int *)(p))            
-#define PUT(p, val)  (*(unsigned int *)(p) = (val))    
+#define PUT(p, val)  (*(unsigned int *)(p) = (val))
 
 /* Read the size and allocated fields from address p */
 #define GET_SIZE(p)  (GET(p) & ~0x7)                   
@@ -51,8 +52,14 @@
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE))) 
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE))) 
 
+/* Free list node */
+#define PREV_FREE(bp)       ((char *)(bp)) 
+#define NEXT_FREE(bp)       ((char *)(bp) + DSIZE)
+#define GETD(p)       (*(void **)(p))    
+#define PUTD(p, val)  (*(void **)(p) = (val))
+
 /* Global variables */
-static char *heap_listp = 0;  /* Pointer to first block */  
+static char *heap_listp = 0;  /* Pointer to first block */
 #ifdef NEXT_FIT
 static char *rover;           /* Next fit rover */
 #endif
@@ -69,13 +76,15 @@ static void *coalesce(void *bp);
 int mm_init(void) 
 {
     /* Create the initial empty heap */
-    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1) 
+    if ((heap_listp = mem_sbrk(8*WSIZE)) == (void *)-1) 
         return -1;
     PUT(heap_listp, 0);                          /* Alignment padding */
-    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); /* Prologue header */ 
-    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
-    PUT(heap_listp + (3*WSIZE), PACK(0, 1));     /* Epilogue header */
-    heap_listp += (2*WSIZE);                     
+    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); /* Prologue header */
+    PUTD(heap_listp + (2*WSIZE), NULL);             /* free list root node prev*/
+    PUTD(heap_listp + (4*WSIZE), NULL);             /* free list root node next*/
+    PUT(heap_listp + (6*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
+    PUT(heap_listp + (7*WSIZE), PACK(0, 1));     /* Epilogue header */
+    heap_listp += (2*WSIZE);
 
 #ifdef NEXT_FIT
     rover = heap_listp;
@@ -104,8 +113,8 @@ void *malloc(size_t size)
         return NULL;
 
     /* Adjust block size to include overhead and alignment reqs. */
-    if (size <= DSIZE)                                          
-        asize = 2*DSIZE;                                        
+    if (size <= 2*DSIZE)                                          
+        asize = 3*DSIZE;                                        
     else
         asize = DSIZE * ((size + (DSIZE) + (DSIZE-1)) / DSIZE); 
 
@@ -128,6 +137,11 @@ void *malloc(size_t size)
  */
 void free(void *bp)
 {
+    bp=bp;
+    return;
+    // TODO: no free now
+
+
     if (bp == 0) 
         return;
 
@@ -185,12 +199,65 @@ void *realloc(void *ptr, size_t size)
  */
 void mm_checkheap(int lineno)  
 { 
-    lineno = lineno; /* keep gcc happy */
+    char *bp;
+    
+    bp = heap_listp;
+    while (1)
+    {
+        // reach end
+        if(GET_SIZE(HDRP(bp))==0 && GET_ALLOC(HDRP(bp))==1){
+            break;
+        }
+
+        // header and footer not equal
+        if(GET(HDRP(bp))!=GET(FTRP(bp))){
+            printf("[%d] header and footer not equal\n", lineno);
+            exit(1);
+        }
+
+        // base pointer not align to 8
+        if((uintptr_t)bp % 8 != 0){
+            printf("[%d] bp not align to 8\n", lineno);
+            exit(1); 
+        }
+
+        // check next bp
+        bp += GET_SIZE(HDRP(bp));
+    }
 }
 
 /* 
  * The remaining routines are internal helper routines 
  */
+
+/**
+ * append node b after node a
+*/
+static void append_free_node(void *a, void *b){
+    void *c = GETD(NEXT_FREE(a));
+    PUTD(NEXT_FREE(a), b);
+    PUTD(PREV_FREE(b), a);
+    if(c!=NULL){
+        PUTD(NEXT_FREE(b), c);
+        PUTD(PREV_FREE(c), b);
+    }
+}
+
+/**
+ * remove node a from free list
+*/
+static void remove_free_node(void *a){
+    void *prevNode = GETD(PREV_FREE(a));
+    void *nextNode = GETD(NEXT_FREE(a));
+
+    if(prevNode!=NULL){
+        PUTD(NEXT_FREE(prevNode), nextNode);
+    }
+
+    if(nextNode!=NULL){
+        PUTD(PREV_FREE(nextNode), prevNode);
+    }
+}
 
 /* 
  * extend_heap - Extend heap with free block and return its block pointer
@@ -209,6 +276,8 @@ static void *extend_heap(size_t words)
     PUT(HDRP(bp), PACK(size, 0));         /* Free block header */   
     PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */   
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */ 
+    
+    append_free_node(heap_listp, bp);
 
     /* Coalesce if the previous block was free */
     return coalesce(bp);                                          
@@ -219,6 +288,10 @@ static void *extend_heap(size_t words)
  */
 static void *coalesce(void *bp) 
 {
+    bp = bp;
+    return bp;
+    // TODO: no coalesce now
+
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
@@ -263,18 +336,10 @@ static void *coalesce(void *bp)
 static void place(void *bp, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));   
-
-    if ((csize - asize) >= (2*DSIZE)) { 
-        PUT(HDRP(bp), PACK(asize, 1));
-        PUT(FTRP(bp), PACK(asize, 1));
-        bp = NEXT_BLKP(bp);
-        PUT(HDRP(bp), PACK(csize-asize, 0));
-        PUT(FTRP(bp), PACK(csize-asize, 0));
-    }
-    else { 
-        PUT(HDRP(bp), PACK(csize, 1));
-        PUT(FTRP(bp), PACK(csize, 1));
-    }
+    PUT(HDRP(bp), PACK(csize, 1));
+    PUT(FTRP(bp), PACK(csize, 1));
+    remove_free_node(bp);
+    // TODO: no spliting
 }
 
 /* 
@@ -301,8 +366,8 @@ static void *find_fit(size_t asize)
     /* First-fit search */
     void *bp;
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+    for (bp = GETD(NEXT_FREE(heap_listp));  bp!= NULL; bp = GETD(NEXT_FREE(bp))) {
+        if ( asize <= GET_SIZE(HDRP(bp))) {
             return bp;
         }
     }
