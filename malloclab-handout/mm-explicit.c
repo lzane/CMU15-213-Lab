@@ -72,6 +72,8 @@ static void *extend_heap(size_t words);
 static void place(void *bp, size_t asize);
 static void *find_fit(size_t asize);
 static void *coalesce(void *bp);
+static void remove_free_node(void *a);
+static void append_free_node(void *a, void *b);
 
 /* 
  * mm_init - Initialize the memory manager 
@@ -143,10 +145,7 @@ void *malloc(size_t size)
  */
 void free(void *bp)
 {
-    bp=bp;
-    return;
-    // TODO: no free now
-
+    mm_checkheap(__LINE__); 
 
     if (bp == 0) 
         return;
@@ -158,7 +157,11 @@ void free(void *bp)
 
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
-    coalesce(bp);
+    
+    bp = coalesce(bp);
+    append_free_node(heap_listp, bp);
+
+    mm_checkheap(__LINE__); 
 }
 
 /*
@@ -325,9 +328,7 @@ static void *extend_heap(size_t words)
  */
 static void *coalesce(void *bp) 
 {
-    bp = bp;
-    return bp;
-    // TODO: no coalesce now
+    mm_checkheap(__LINE__); 
 
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
@@ -338,12 +339,14 @@ static void *coalesce(void *bp)
     }
 
     else if (prev_alloc && !next_alloc) {      /* Case 2 */
+        remove_free_node(NEXT_BLKP(bp));
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size,0));
     }
 
     else if (!prev_alloc && next_alloc) {      /* Case 3 */
+        remove_free_node(PREV_BLKP(bp));
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
@@ -351,6 +354,8 @@ static void *coalesce(void *bp)
     }
 
     else {                                     /* Case 4 */
+        remove_free_node(NEXT_BLKP(bp));
+        remove_free_node(PREV_BLKP(bp)); 
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
             GET_SIZE(FTRP(NEXT_BLKP(bp)));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
@@ -363,6 +368,8 @@ static void *coalesce(void *bp)
     if ((rover > (char *)bp) && (rover < NEXT_BLKP(bp))) 
         rover = bp;
 #endif
+
+    mm_checkheap(__LINE__); 
     return bp;
 }
 
@@ -372,13 +379,26 @@ static void *coalesce(void *bp)
  */
 static void place(void *bp, size_t asize)
 {
-    size_t csize = GET_SIZE(HDRP(bp));   
-    PUT(HDRP(bp), PACK(csize, 1));
-    PUT(FTRP(bp), PACK(csize, 1));
-    remove_free_node(bp);
-    
     checkheap(__LINE__);
-    // TODO: no spliting
+    
+    size_t csize = GET_SIZE(HDRP(bp));    
+    // if ((csize - asize) >= (3*DSIZE)) { 
+    //     PUT(HDRP(bp), PACK(asize, 1));
+    //     PUT(FTRP(bp), PACK(asize, 1));
+    //     // use the remain room to create a new block
+    //     // then add it to the free list
+    //     PUT(HDRP(NEXT_BLKP(bp)), PACK(csize-asize, 0));
+    //     PUT(FTRP(NEXT_BLKP(bp)), PACK(csize-asize, 0));
+    //     remove_free_node(bp);
+    //     append_free_node(heap_listp, NEXT_BLKP(bp));
+    // }
+    // else { 
+        PUT(HDRP(bp), PACK(csize, 1));
+        PUT(FTRP(bp), PACK(csize, 1));
+        remove_free_node(bp);
+    // }
+
+    checkheap(__LINE__);
 }
 
 /* 
