@@ -26,8 +26,8 @@
  */
 #define NEXT_FITx
 
-#define checkheap(x) mm_checkheap(x);
-// #define checkheap(x)
+// #define checkheap(x) mm_checkheap(x);
+#define checkheap(x)
 
 /* Basic constants and macros */
 #define WSIZE       4       /* Word and header/footer size (bytes) */ 
@@ -129,6 +129,7 @@ void *malloc(size_t size)
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL) {  
         place(bp, asize);                  
+        mm_checkheap(__LINE__); 
         return bp;
     }
 
@@ -136,7 +137,8 @@ void *malloc(size_t size)
     extendsize = MAX(asize,CHUNKSIZE);                 
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL)  
         return NULL;                                  
-    place(bp, asize);                                 
+    place(bp, asize);       
+    mm_checkheap(__LINE__);                           
     return bp;
 } 
 
@@ -145,8 +147,6 @@ void *malloc(size_t size)
  */
 void free(void *bp)
 {
-    mm_checkheap(__LINE__); 
-
     if (bp == 0) 
         return;
 
@@ -209,13 +209,19 @@ void *realloc(void *ptr, size_t size)
 void mm_checkheap(int lineno)  
 { 
     char *bp;
+    int freeBlockCountByHeap = 0;
+    int freeBlockCountByList = 0;
 
     // check the heap
-    bp = heap_listp;
+    bp = heap_listp;    
     while (1)
     {
         // reach end
         if(GET_SIZE(HDRP(bp))==0 && GET_ALLOC(HDRP(bp))==1){
+            if((size_t)(bp-heap_listp)+DSIZE != mem_heapsize()){
+                printf("[%d] heapsize not equal\n", lineno);
+                exit(1); 
+            }
             break;
         }
 
@@ -231,6 +237,16 @@ void mm_checkheap(int lineno)
             exit(1); 
         }
 
+        // no consecutive free block
+        if(bp!=heap_listp && !GET_ALLOC(HDRP(PREV_BLKP(bp))) && !GET_ALLOC(HDRP(bp))){
+            printf("[%d] consecutive free block\n", lineno); 
+            exit(1); 
+        }
+
+        if(!GET_ALLOC(HDRP(bp))){
+            freeBlockCountByHeap++;
+        }
+
         // check next bp
         bp += GET_SIZE(HDRP(bp));
     }
@@ -244,13 +260,32 @@ void mm_checkheap(int lineno)
             break;
         }
 
-        char *next = GETD(NEXT_FREE(bp));
+        void *next = GETD(NEXT_FREE(bp));
+        void *prev = GETD(PREV_FREE(bp));
+        
+        // double link list
         if(GETD(PREV_FREE(next))!=bp){
             printf("[%d] a's next and b's prev not equal\n", lineno);
             exit(1);
         }
 
+        // within bound
+        if(next!=NULL && (next < mem_heap_lo() || next>mem_heap_hi())){
+           printf("[%d] a's next exceed boundary\n", lineno);
+           exit(1); 
+        }
+        if(prev!=NULL && (prev < mem_heap_lo() || prev>mem_heap_hi())){
+           printf("[%d] a's prev exceed boundary\n", lineno);
+           exit(1); 
+        }
+
+        freeBlockCountByList++;
         bp = next;
+    }
+
+    if(freeBlockCountByHeap != freeBlockCountByList){
+        printf("[%d] freeBlockCountByHeap(%d) != freeBlockCountByList(%d)\n", lineno, freeBlockCountByHeap, freeBlockCountByList);
+        exit(1);  
     }
 }
 
@@ -262,29 +297,23 @@ void mm_checkheap(int lineno)
  * append node b after node a
 */
 static void append_free_node(void *a, void *b){
-    mm_checkheap(__LINE__); 
-    
     void *c = GETD(NEXT_FREE(a));
     PUTD(NEXT_FREE(a), b);
     PUTD(PREV_FREE(b), a);
 
-    // clear b's next
+    // reset b's next
     PUTD(NEXT_FREE(b), NULL);
 
     if(c!=NULL){
         PUTD(NEXT_FREE(b), c);
         PUTD(PREV_FREE(c), b);
-    }
-    
-    mm_checkheap(__LINE__); 
+    }    
 }
 
 /**
  * remove node a from free list
 */
 static void remove_free_node(void *a){
-    mm_checkheap(__LINE__); 
-
     void *prevNode = GETD(PREV_FREE(a));
     void *nextNode = GETD(NEXT_FREE(a));
 
@@ -295,8 +324,6 @@ static void remove_free_node(void *a){
     if(nextNode!=NULL){
         PUTD(PREV_FREE(nextNode), prevNode);
     }
-    
-    mm_checkheap(__LINE__); 
 }
 
 /* 
@@ -317,10 +344,11 @@ static void *extend_heap(size_t words)
     PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */   
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */ 
     
-    append_free_node(heap_listp, bp);
-
     /* Coalesce if the previous block was free */
-    return coalesce(bp);                                          
+    bp = coalesce(bp);
+
+    append_free_node(heap_listp, bp);
+    return bp;             
 }
 
 /*
@@ -328,8 +356,6 @@ static void *extend_heap(size_t words)
  */
 static void *coalesce(void *bp) 
 {
-    mm_checkheap(__LINE__); 
-
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
@@ -369,7 +395,6 @@ static void *coalesce(void *bp)
         rover = bp;
 #endif
 
-    mm_checkheap(__LINE__); 
     return bp;
 }
 
@@ -378,25 +403,23 @@ static void *coalesce(void *bp)
  *         and split if remainder would be at least minimum block size
  */
 static void place(void *bp, size_t asize)
-{
-    checkheap(__LINE__);
-    
+{   
     size_t csize = GET_SIZE(HDRP(bp));    
-    // if ((csize - asize) >= (3*DSIZE)) { 
-    //     PUT(HDRP(bp), PACK(asize, 1));
-    //     PUT(FTRP(bp), PACK(asize, 1));
-    //     // use the remain room to create a new block
-    //     // then add it to the free list
-    //     PUT(HDRP(NEXT_BLKP(bp)), PACK(csize-asize, 0));
-    //     PUT(FTRP(NEXT_BLKP(bp)), PACK(csize-asize, 0));
-    //     remove_free_node(bp);
-    //     append_free_node(heap_listp, NEXT_BLKP(bp));
-    // }
-    // else { 
+    if ((csize - asize) >= (3*DSIZE)) { 
+        PUT(HDRP(bp), PACK(asize, 1));
+        PUT(FTRP(bp), PACK(asize, 1));
+        // use the remain room to create a new block
+        // then add it to the free list
+        PUT(HDRP(NEXT_BLKP(bp)), PACK(csize-asize, 0));
+        PUT(FTRP(NEXT_BLKP(bp)), PACK(csize-asize, 0));
+        remove_free_node(bp);
+        append_free_node(heap_listp, NEXT_BLKP(bp));
+    }
+    else { 
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
         remove_free_node(bp);
-    // }
+    }
 
     checkheap(__LINE__);
 }
