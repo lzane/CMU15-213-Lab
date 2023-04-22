@@ -1,8 +1,8 @@
 /* 
- * Simple, 32-bit and 64-bit clean allocator based on implicit free
- * lists, first-fit placement, and boundary tag coalescing, as described
- * in the CS:APP3e text. Blocks must be aligned to doubleword (8 byte) 
- * boundaries. Minimum block size is 16 bytes. 
+ * Explicit, 32-bit and 64-bit clean allocator based on explicit free
+ * lists, first-fit placement, and boundary tag coalescing. 
+ * Blocks must be aligned to doubleword (8 byte) 
+ * boundaries. Minimum block size is 24 bytes. 
  */
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +26,9 @@
  */
 #define NEXT_FITx
 
+/**
+ * Checkheap Flag
+*/
 // #define checkheap(x) mm_checkheap(x);
 #define checkheap(x)
 
@@ -129,7 +132,7 @@ void *malloc(size_t size)
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL) {  
         place(bp, asize);                  
-        mm_checkheap(__LINE__); 
+        checkheap(__LINE__); 
         return bp;
     }
 
@@ -138,7 +141,7 @@ void *malloc(size_t size)
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL)  
         return NULL;                                  
     place(bp, asize);       
-    mm_checkheap(__LINE__);                           
+    checkheap(__LINE__);                           
     return bp;
 } 
 
@@ -161,7 +164,7 @@ void free(void *bp)
     bp = coalesce(bp);
     append_free_node(heap_listp, bp);
 
-    mm_checkheap(__LINE__); 
+    checkheap(__LINE__); 
 }
 
 /*
@@ -197,6 +200,19 @@ void *realloc(void *ptr, size_t size)
 
     /* Free the old block. */
     mm_free(ptr);
+
+    return newptr;
+}
+
+/**
+ * calloc simple implementation
+*/
+void *calloc (size_t nmemb, size_t size){
+    size_t bytes = nmemb * size;
+    void *newptr;
+
+    newptr = malloc(bytes);
+    memset(newptr, 0, bytes);
 
     return newptr;
 }
