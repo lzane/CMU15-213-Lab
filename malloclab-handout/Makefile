@@ -5,9 +5,9 @@ CC = gcc
 CFLAGS = -Wall -Wextra -Werror -O3 -DDRIVER -std=gnu99 -Wno-unused-function -Wno-unused-parameter -lm
 
 # For debug
-# CFLAGS = -Wall -Wextra -g -DDRIVER -std=gnu99 -Wno-unused-function -Wno-unused-parameter -lm
+# CFLAGS = -Wall -Wextra -Werror -g -DDRIVER -std=gnu99 -Wno-unused-function -Wno-unused-parameter -lm
 # For profile
-# CFLAGS = -Wall -Wextra -O3 -pg -DDRIVER -std=gnu99 -Wno-unused-function -Wno-unused-parameter -lm
+# CFLAGS = -Wall -Wextra -Werror -O3 -pg -DDRIVER -std=gnu99 -Wno-unused-function -Wno-unused-parameter -lm -fno-inline
 
 OBJS = mdriver.o mm.o memlib.o fsecs.o fcyc.o clock.o ftimer.o 
 
