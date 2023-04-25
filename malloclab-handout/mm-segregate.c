@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
-
 #include "mm.h"
 #include "memlib.h"
 
@@ -59,14 +58,15 @@
 /* Free list node */
 #define PREV_FREE(bp)       ((char *)(bp)) 
 #define NEXT_FREE(bp)       ((char *)(bp) + WSIZE)
-#define GET_PTR(p)             ((char *)((unsigned long)(*(unsigned int *)(p))+(unsigned long)heap_listp))
-#define PUT_PTR(p, val)        (*(unsigned int *)(p) = ((unsigned int)((char *)(val) - heap_listp))) 
-#define NULL_PTR            heap_listp
+#define NULL_PTR            heap_start
+#define GET_PTR(p)             ((char *)((unsigned long)(*(unsigned int *)(p))+(unsigned long)NULL_PTR))
+#define PUT_PTR(p, val)        (*(unsigned int *)(p) = ((unsigned int)((char *)(val) - NULL_PTR))) 
 #define ROOT_BY_BLOCK(block_num) ((char *)heap_listp + (block_num)*2*WSIZE)
 
 /* Global variables */
 static char *heap_listp = 0;  /* Pointer to first block */
 static char *heap_free_list_end = 0; /* Pointer to free list end */
+static char *heap_start = 0; /* Pointer to heap start */
 
 /* Function prototypes for internal helper routines */
 static void *extend_heap(size_t words);
@@ -86,6 +86,7 @@ int mm_init(void)
     /* Create the initial empty heap */
     if ((heap_listp = mem_sbrk(DSIZE+reserve_size+DSIZE)) == (void *)-1) 
         return -1;
+    heap_start = heap_listp;
     PUT(heap_listp, 0);                          /* Alignment padding */
     PUT(heap_listp + WSIZE, PACK(DSIZE+reserve_size, 0, 1)); /* Prologue header */
     heap_listp += (2*WSIZE);
@@ -163,7 +164,7 @@ void free(void *bp)
     
     // reset the next block prev alloc flag
     char *next_blk_header = HDRP(NEXT_BLKP(bp));
-    PUT(next_blk_header, GET_SIZE(next_blk_header) | GET_ALLOC(next_blk_header)); 
+    PUT(next_blk_header, PACK(GET_SIZE(next_blk_header), 0, GET_ALLOC(next_blk_header))); 
 
     bp = coalesce(bp);
     add_free_node(bp);
@@ -340,8 +341,8 @@ void mm_checkheap(int lineno)
 */
 static void add_free_node(void *a){
     void *root = root_by_asize(GET_SIZE(HDRP(a)));
-
     void *next = GET_PTR(NEXT_FREE(root));
+
     PUT_PTR(NEXT_FREE(root), a);
     PUT_PTR(PREV_FREE(a), root);
 
@@ -510,8 +511,8 @@ static void *find_fit(size_t asize)
 */
 static void *root_by_asize(size_t asize){
     size_t block_size = asize/WSIZE;
-    int block_num = ceil(log2(block_size));
+    int block_num = log2(block_size)-2;
     if (block_num > FREELISTCOUNT-1) block_num = FREELISTCOUNT-1;
-
+    
     return ROOT_BY_BLOCK(block_num); 
 }
