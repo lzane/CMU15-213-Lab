@@ -58,10 +58,11 @@
 
 /* Free list node */
 #define PREV_FREE(bp)       ((char *)(bp)) 
-#define NEXT_FREE(bp)       ((char *)(bp) + DSIZE)
-#define GETD(p)       (*(void **)(p))    
-#define PUTD(p, val)  (*(void **)(p) = (val))
-#define ROOT_BY_BLOCK(block_num) ((char *)heap_listp + (block_num)*2*DSIZE)
+#define NEXT_FREE(bp)       ((char *)(bp) + WSIZE)
+#define GET_PTR(p)             ((char *)((unsigned long)(*(unsigned int *)(p))+(unsigned long)heap_listp))
+#define PUT_PTR(p, val)        (*(unsigned int *)(p) = ((unsigned int)((char *)(val) - heap_listp))) 
+#define NULL_PTR            heap_listp
+#define ROOT_BY_BLOCK(block_num) ((char *)heap_listp + (block_num)*2*WSIZE)
 
 /* Global variables */
 static char *heap_listp = 0;  /* Pointer to first block */
@@ -81,7 +82,7 @@ static void *root_by_asize(size_t asize);
  */
 int mm_init(void) 
 {
-    int reserve_size = FREELISTCOUNT*2*DSIZE;
+    int reserve_size = FREELISTCOUNT*2*WSIZE;
     /* Create the initial empty heap */
     if ((heap_listp = mem_sbrk(DSIZE+reserve_size+DSIZE)) == (void *)-1) 
         return -1;
@@ -90,8 +91,8 @@ int mm_init(void)
     heap_listp += (2*WSIZE);
     for (int i = 0; i < FREELISTCOUNT; i++)
     {
-        PUTD(ROOT_BY_BLOCK(i), NULL);             /* free list root node prev*/
-        PUTD(ROOT_BY_BLOCK(i) + DSIZE, NULL);             /* free list root node next*/
+        PUT_PTR(ROOT_BY_BLOCK(i), NULL_PTR);             /* free list root node prev*/
+        PUT_PTR(ROOT_BY_BLOCK(i) + WSIZE, NULL_PTR);             /* free list root node next*/
     }
     heap_free_list_end = ROOT_BY_BLOCK(FREELISTCOUNT);
     PUT(heap_free_list_end,PACK(DSIZE+reserve_size, 0, 1)); /* Prologue footer */ 
@@ -122,8 +123,8 @@ void *malloc(size_t size)
         return NULL;
 
     /* Adjust block size to include overhead and alignment reqs. */
-    if (size <= 2*DSIZE+WSIZE)                                          
-        asize = 3*DSIZE;                                        
+    if (size <= DSIZE+WSIZE)                                          
+        asize = 2*DSIZE;                                        
     else
         asize = DSIZE * ((size + WSIZE + (DSIZE-1)) / DSIZE);
 
@@ -285,28 +286,28 @@ void mm_checkheap(int lineno)
         while (1)
         {
             // reach end
-            if (GETD(NEXT_FREE(bp)) == NULL)
+            if (GET_PTR(NEXT_FREE(bp)) == NULL_PTR)
             {
                 break;
             }
 
-            void *next = GETD(NEXT_FREE(bp));
-            void *prev = GETD(PREV_FREE(bp));
+            void *next = GET_PTR(NEXT_FREE(bp));
+            void *prev = GET_PTR(PREV_FREE(bp));
 
             // double link list
-            if (GETD(PREV_FREE(next)) != bp)
+            if (GET_PTR(PREV_FREE(next)) != bp)
             {
                 printf("[%d] a's next and b's prev not equal\n", lineno);
                 abort();
             }
 
             // within bound
-            if (next != NULL && (next < mem_heap_lo() || next > mem_heap_hi()))
+            if (next != NULL_PTR && (next < mem_heap_lo() || next > mem_heap_hi()))
             {
                 printf("[%d] a's next exceed boundary\n", lineno);
                 abort();
             }
-            if (prev != NULL && (prev < mem_heap_lo() || prev > mem_heap_hi()))
+            if (prev != NULL_PTR && (prev < mem_heap_lo() || prev > mem_heap_hi()))
             {
                 printf("[%d] a's prev exceed boundary\n", lineno);
                 abort();
@@ -340,16 +341,16 @@ void mm_checkheap(int lineno)
 static void add_free_node(void *a){
     void *root = root_by_asize(GET_SIZE(HDRP(a)));
 
-    void *next = GETD(NEXT_FREE(root));
-    PUTD(NEXT_FREE(root), a);
-    PUTD(PREV_FREE(a), root);
+    void *next = GET_PTR(NEXT_FREE(root));
+    PUT_PTR(NEXT_FREE(root), a);
+    PUT_PTR(PREV_FREE(a), root);
 
     // reset b's next
-    PUTD(NEXT_FREE(a), NULL);
+    PUT_PTR(NEXT_FREE(a), NULL_PTR);
 
-    if(next!=NULL){
-        PUTD(NEXT_FREE(a), next);
-        PUTD(PREV_FREE(next), a);
+    if(next!=NULL_PTR){
+        PUT_PTR(NEXT_FREE(a), next);
+        PUT_PTR(PREV_FREE(next), a);
     }    
 }
 
@@ -357,15 +358,15 @@ static void add_free_node(void *a){
  * remove node a from free list
 */
 static void remove_free_node(void *a){
-    void *prevNode = GETD(PREV_FREE(a));
-    void *nextNode = GETD(NEXT_FREE(a));
+    void *prevNode = GET_PTR(PREV_FREE(a));
+    void *nextNode = GET_PTR(NEXT_FREE(a));
 
-    if(prevNode!=NULL){
-        PUTD(NEXT_FREE(prevNode), nextNode);
+    if(prevNode!=NULL_PTR){
+        PUT_PTR(NEXT_FREE(prevNode), nextNode);
     }
 
-    if(nextNode!=NULL){
-        PUTD(PREV_FREE(nextNode), prevNode);
+    if(nextNode!=NULL_PTR){
+        PUT_PTR(PREV_FREE(nextNode), prevNode);
     }
 }
 
@@ -445,7 +446,7 @@ static void *coalesce(void *bp)
 static void place(void *bp, size_t asize)
 {   
     size_t csize = GET_SIZE(HDRP(bp));    
-    if ((csize - asize) >= (3*DSIZE)) { 
+    if ((csize - asize) >= (2*DSIZE)) { 
         PUT(HDRP(bp), PACK(asize, 1, 1));
         PUT(FTRP(bp), PACK(asize, 1, 1));
         // use the remain room to create a new block
@@ -480,7 +481,7 @@ static void *find_fit(size_t asize)
 
     /* first search the target free list */
     root = root_by_asize(asize);
-    for (bp = GETD(NEXT_FREE(root)); bp != NULL; bp = GETD(NEXT_FREE(bp)))
+    for (bp = GET_PTR(NEXT_FREE(root)); bp != NULL_PTR; bp = GET_PTR(NEXT_FREE(bp)))
     {
         if (asize <= GET_SIZE(HDRP(bp)))
         {
@@ -489,10 +490,10 @@ static void *find_fit(size_t asize)
     }
 
     /* search the larger free list */
-    for (root += 2 * DSIZE; root != heap_free_list_end; root += 2 * DSIZE)
+    for (root += 2 * WSIZE; root != heap_free_list_end; root += 2 * WSIZE)
     {
-        bp = GETD(NEXT_FREE(root));
-        if (bp != NULL)
+        bp = GET_PTR(NEXT_FREE(root));
+        if (bp != NULL_PTR)
         {
             return bp;
         }
@@ -509,11 +510,6 @@ static void *find_fit(size_t asize)
 */
 static void *root_by_asize(size_t asize){
     size_t block_size = asize/WSIZE;
-    if(block_size<=0){
-        printf("block_size equals to zero\n");
-        abort();
-    }
-
     int block_num = ceil(log2(block_size));
     if (block_num > FREELISTCOUNT-1) block_num = FREELISTCOUNT-1;
 
